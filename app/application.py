@@ -48,17 +48,20 @@ class MediaCaptioningApp:
         file_menu.add_command(label="Open Project", command=self.open_project)
         file_menu.add_command(label="Save Project", command=self.save_project)
         file_menu.add_command(label="Save Project As", command=self.save_project_as)
-        file_menu.add_separator()
-        file_menu.add_command(label="Export Dataset", command=self.export_dataset)
-        file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.master.quit)
         menubar.add_cascade(label="File", menu=file_menu)
-        
+
         # Edit menu
         edit_menu = tk.Menu(menubar, tearoff=0)
         edit_menu.add_command(label="Set Media Path", command=self.set_media_path)
         menubar.add_cascade(label="Edit", menu=edit_menu)
-                
+        
+        # Export menu
+        export_menu = tk.Menu(menubar, tearoff=0)
+        export_menu.add_command(label="Export Dataset", command=self.export_dataset)
+        export_menu.add_command(label="Export Masks", command=self.export_masks)
+        menubar.add_cascade(label="Export", menu=export_menu)
+                   
         self.master.config(menu=menubar)
     
     def create_layout(self):
@@ -406,4 +409,105 @@ class MediaCaptioningApp:
             messagebox.showerror("Error", f"Tracking failed: {str(e)}")
         finally:
             # Close progress window
-            progress_window.destroy() 
+            progress_window.destroy()
+    
+    def export_masks(self):
+        """Export masks as black and white images/videos"""
+        if not self.current_project:
+            messagebox.showerror("Error", "No project is currently open")
+            return
+        
+        export_dir = filedialog.askdirectory(title="Select Export Directory for Masks")
+        if not export_dir:
+            return
+            
+        import cv2
+        import numpy as np
+        from PIL import Image, ImageDraw
+        
+        # Create export directory if it doesn't exist
+        os.makedirs(export_dir, exist_ok=True)
+        
+        # Process each media file that has masks
+        for media_id, masks in self.current_project.get('masks', {}).items():
+            if not masks:  # Skip if no masks for this media
+                continue
+                
+            # Get the original media file path
+            media_path = os.path.join(self.current_project['media_path'], media_id)
+            if not os.path.exists(media_path):
+                messagebox.showwarning("Warning", f"Media file not found: {media_id}")
+                continue
+            
+            # Determine if it's an image or video
+            is_video = media_id.lower().endswith(('.mp4', '.avi', '.mov'))
+            
+            if is_video:
+                # Process video
+                cap = cv2.VideoCapture(media_path)
+                if not cap.isOpened():
+                    messagebox.showwarning("Warning", f"Could not open video: {media_id}")
+                    continue
+                
+                # Get video properties
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                
+                # Create output video writer
+                mask_path = os.path.join(export_dir, f"{os.path.splitext(media_id)[0]}_mask.mp4")
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(mask_path, fourcc, fps, (width, height), False)
+                
+                # Process each frame
+                frame_idx = 0
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    
+                    # Create mask frame
+                    mask_frame = np.zeros((height, width), dtype=np.uint8)
+                    
+                    # Draw all masks for this frame
+                    for mask in masks:
+                        points = self.mask_manager.get_interpolated_points(mask, frame_idx)
+                        if points:
+                            # Convert points to numpy array
+                            points = np.array(points, dtype=np.int32)
+                            # Fill the polygon with white (255)
+                            cv2.fillPoly(mask_frame, [points], 255)
+                    
+                    # Write the mask frame
+                    out.write(mask_frame)
+                    frame_idx += 1
+                
+                # Release video resources
+                cap.release()
+                out.release()
+                
+            else:
+                # Process image
+                # Open the image to get dimensions
+                img = Image.open(media_path)
+                width, height = img.size
+                
+                # Create a new black image
+                mask_img = Image.new('L', (width, height), 0)
+                draw = ImageDraw.Draw(mask_img)
+                
+                # Draw all masks
+                for mask in masks:
+                    points = mask.get('points', [])
+                    if points:
+                        # Convert points to flat list for PIL
+                        flat_points = [coord for point in points for coord in point]
+                        # Fill the polygon with white (255)
+                        draw.polygon(flat_points, fill=255)
+                
+                # Save the mask image
+                mask_path = os.path.join(export_dir, f"{os.path.splitext(media_id)[0]}_mask{os.path.splitext(media_id)[1]}")
+                mask_img.save(mask_path)
+        
+        messagebox.showinfo("Success", "Masks exported successfully!") 
