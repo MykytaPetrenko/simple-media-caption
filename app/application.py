@@ -58,8 +58,7 @@ class MediaCaptioningApp:
         
         # Export menu
         export_menu = tk.Menu(menubar, tearoff=0)
-        export_menu.add_command(label="Export Dataset", command=self.export_dataset)
-        export_menu.add_command(label="Export Masks", command=self.export_masks)
+        export_menu.add_command(label="Export", command=self.show_export_dialog)
         menubar.add_cascade(label="Export", menu=export_menu)
                    
         self.master.config(menu=menubar)
@@ -187,15 +186,375 @@ class MediaCaptioningApp:
         if file_path:
             self.project_manager.save_project(file_path)
     
-    def export_dataset(self):
-        """Export the project as a dataset"""
+    def show_export_dialog(self):
+        """Show the unified export dialog"""
         if not self.current_project:
             messagebox.showerror("Error", "No project is currently open")
             return
         
-        export_dir = filedialog.askdirectory(title="Select Export Directory")
-        if export_dir:
-            self.project_manager.export_dataset(export_dir)
+        # Create dialog window
+        dialog = tk.Toplevel(self.master)
+        dialog.title("Export Options")
+        dialog.geometry("500x550")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        
+        # Create main frame with padding
+        main_frame = ttk.Frame(dialog, padding="20 20 20 20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Variables for form fields
+        export_media_var = tk.BooleanVar(value=False)
+        export_media_path_var = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "exported_media"))
+        
+        export_captions_var = tk.BooleanVar(value=False)
+        export_captions_path_var = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "exported_captions"))
+        use_media_folder_var = tk.BooleanVar(value=False)
+        
+        export_masks_var = tk.BooleanVar(value=False)
+        export_masks_path_var = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "exported_masks"))
+        mask_offset_var = tk.IntVar(value=0)
+        blur_mask_var = tk.BooleanVar(value=False)
+        blur_amount_var = tk.IntVar(value=3)
+        mask_intensity_var = tk.IntVar(value=255)
+        invert_mask_var = tk.BooleanVar(value=False)
+        
+        # Helper function to update UI state
+        def update_ui_state():
+            # Media export options
+            media_path_entry.config(state=tk.NORMAL if export_media_var.get() else tk.DISABLED)
+            media_path_button.config(state=tk.NORMAL if export_media_var.get() else tk.DISABLED)
+            
+            # Caption export options
+            captions_path_entry.config(state=tk.NORMAL if export_captions_var.get() and not use_media_folder_var.get() else tk.DISABLED)
+            captions_path_button.config(state=tk.NORMAL if export_captions_var.get() and not use_media_folder_var.get() else tk.DISABLED)
+            use_media_folder_cb.config(state=tk.NORMAL if export_captions_var.get() and export_media_var.get() else tk.DISABLED)
+            
+            # Mask export options
+            masks_path_entry.config(state=tk.NORMAL if export_masks_var.get() else tk.DISABLED)
+            masks_path_button.config(state=tk.NORMAL if export_masks_var.get() else tk.DISABLED)
+            mask_offset_entry.config(state=tk.NORMAL if export_masks_var.get() else tk.DISABLED)
+            blur_mask_cb.config(state=tk.NORMAL if export_masks_var.get() else tk.DISABLED)
+            blur_amount_entry.config(state=tk.NORMAL if export_masks_var.get() and blur_mask_var.get() else tk.DISABLED)
+            mask_intensity_entry.config(state=tk.NORMAL if export_masks_var.get() else tk.DISABLED)
+            invert_mask_cb.config(state=tk.NORMAL if export_masks_var.get() else tk.DISABLED)
+        
+        # Helper function to browse for directory
+        def browse_directory(path_var):
+            directory = filedialog.askdirectory(title="Select Export Directory")
+            if directory:
+                path_var.set(directory)
+        
+        # Media export section
+        media_frame = ttk.LabelFrame(main_frame, text="Media Export", padding="10 10 10 10")
+        media_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        media_cb = ttk.Checkbutton(media_frame, text="Export Media", variable=export_media_var, command=update_ui_state)
+        media_cb.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        
+        ttk.Label(media_frame, text="Export Path:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        media_path_entry = ttk.Entry(media_frame, textvariable=export_media_path_var, width=40)
+        media_path_entry.grid(row=1, column=1, sticky=tk.W, pady=2)
+        media_path_button = ttk.Button(media_frame, text="Browse...", 
+                                       command=lambda: browse_directory(export_media_path_var))
+        media_path_button.grid(row=1, column=2, sticky=tk.W, pady=2, padx=(5, 0))
+        
+        # Captions export section
+        captions_frame = ttk.LabelFrame(main_frame, text="Captions Export", padding="10 10 10 10")
+        captions_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        captions_cb = ttk.Checkbutton(captions_frame, text="Export Captions", variable=export_captions_var, command=update_ui_state)
+        captions_cb.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        
+        use_media_folder_cb = ttk.Checkbutton(captions_frame, text="Use Media Export Folder", 
+                                             variable=use_media_folder_var, command=update_ui_state)
+        use_media_folder_cb.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        
+        ttk.Label(captions_frame, text="Export Path:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        captions_path_entry = ttk.Entry(captions_frame, textvariable=export_captions_path_var, width=40)
+        captions_path_entry.grid(row=2, column=1, sticky=tk.W, pady=2)
+        captions_path_button = ttk.Button(captions_frame, text="Browse...", 
+                                         command=lambda: browse_directory(export_captions_path_var))
+        captions_path_button.grid(row=2, column=2, sticky=tk.W, pady=2, padx=(5, 0))
+        
+        # Masks export section
+        masks_frame = ttk.LabelFrame(main_frame, text="Masks Export", padding="10 10 10 10")
+        masks_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        masks_cb = ttk.Checkbutton(masks_frame, text="Export Masks", variable=export_masks_var, command=update_ui_state)
+        masks_cb.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        
+        ttk.Label(masks_frame, text="Export Path:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        masks_path_entry = ttk.Entry(masks_frame, textvariable=export_masks_path_var, width=40)
+        masks_path_entry.grid(row=1, column=1, sticky=tk.W, pady=2)
+        masks_path_button = ttk.Button(masks_frame, text="Browse...", 
+                                      command=lambda: browse_directory(export_masks_path_var))
+        masks_path_button.grid(row=1, column=2, sticky=tk.W, pady=2, padx=(5, 0))
+        
+        ttk.Label(masks_frame, text="Mask Offset (px):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        mask_offset_entry = ttk.Spinbox(masks_frame, from_=-50, to=50, textvariable=mask_offset_var, width=5)
+        mask_offset_entry.grid(row=2, column=1, sticky=tk.W, pady=2)
+        
+        blur_mask_cb = ttk.Checkbutton(masks_frame, text="Blur Mask", variable=blur_mask_var, command=update_ui_state)
+        blur_mask_cb.grid(row=3, column=0, sticky=tk.W, pady=2)
+        
+        ttk.Label(masks_frame, text="Blur Amount (px):").grid(row=4, column=0, sticky=tk.W, pady=2)
+        blur_amount_entry = ttk.Spinbox(masks_frame, from_=1, to=20, textvariable=blur_amount_var, width=5)
+        blur_amount_entry.grid(row=4, column=1, sticky=tk.W, pady=2)
+        
+        ttk.Label(masks_frame, text="Mask Intensity (0-255):").grid(row=5, column=0, sticky=tk.W, pady=2)
+        mask_intensity_entry = ttk.Spinbox(masks_frame, from_=0, to=255, textvariable=mask_intensity_var, width=5)
+        mask_intensity_entry.grid(row=5, column=1, sticky=tk.W, pady=2)
+        
+        invert_mask_cb = ttk.Checkbutton(masks_frame, text="Invert Mask", variable=invert_mask_var)
+        invert_mask_cb.grid(row=6, column=0, sticky=tk.W, pady=2)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.RIGHT, padx=(5, 0))
+        
+        def perform_export():
+            # Validate that at least one export option is selected
+            if not any([export_media_var.get(), export_captions_var.get(), export_masks_var.get()]):
+                messagebox.showerror("Error", "Please select at least one export option")
+                return
+            
+            # Prepare export paths
+            media_export_path = export_media_path_var.get() if export_media_var.get() else None
+            
+            if export_captions_var.get():
+                if use_media_folder_var.get() and export_media_var.get():
+                    captions_export_path = media_export_path
+                else:
+                    captions_export_path = export_captions_path_var.get()
+            else:
+                captions_export_path = None
+            
+            masks_export_path = export_masks_path_var.get() if export_masks_var.get() else None
+            
+            # Create directories if they don't exist
+            for path in [p for p in [media_export_path, captions_export_path, masks_export_path] if p]:
+                os.makedirs(path, exist_ok=True)
+            
+            # Perform exports
+            try:
+                if export_media_var.get():
+                    self.export_media(media_export_path)
+                
+                if export_captions_var.get():
+                    self.export_captions(captions_export_path)
+                
+                if export_masks_var.get():
+                    self.export_masks_advanced(
+                        masks_export_path,
+                        mask_offset_var.get(),
+                        blur_mask_var.get(),
+                        blur_amount_var.get(),
+                        mask_intensity_var.get(),
+                        invert_mask_var.get()
+                    )
+                
+                messagebox.showinfo("Success", "Export completed successfully!")
+                dialog.destroy()
+            except Exception as e:
+                messagebox.showerror("Error", f"Export failed: {str(e)}")
+        
+        ttk.Button(button_frame, text="Export", command=perform_export).pack(side=tk.RIGHT)
+        
+        # Initialize UI state
+        update_ui_state()
+    
+    def export_media(self, export_path):
+        """Export media files"""
+        import shutil
+        
+        # Copy all media files referenced in the project
+        for media_id in self.current_project.get('media_files', {}):
+            source_path = os.path.join(self.current_project['media_path'], media_id)
+            dest_path = os.path.join(export_path, media_id)
+            
+            if os.path.exists(source_path):
+                shutil.copy2(source_path, dest_path)
+    
+    def export_captions(self, export_path):
+        """Export captions to text files"""
+        # Export captions as text files
+        for media_id, media_info in self.current_project.get('media_files', {}).items():
+            caption = media_info.get('caption', '')
+            if caption:
+                caption_filename = f"{os.path.splitext(media_id)[0]}.txt"
+                caption_path = os.path.join(export_path, caption_filename)
+                
+                with open(caption_path, 'w', encoding='utf-8') as f:
+                    f.write(caption)
+    
+    def export_masks_advanced(self, export_path, mask_offset=0, blur_mask=False, blur_amount=3, 
+                             mask_intensity=255, invert_mask=False):
+        """Export masks with advanced options"""
+        import cv2
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFilter
+        
+        # Process each media file that has masks
+        for media_id, masks in self.current_project.get('masks', {}).items():
+            if not masks:  # Skip if no masks for this media
+                continue
+                
+            # Get the original media file path
+            media_path = os.path.join(self.current_project['media_path'], media_id)
+            if not os.path.exists(media_path):
+                messagebox.showwarning("Warning", f"Media file not found: {media_id}")
+                continue
+            
+            # Determine if it's an image or video
+            is_video = media_id.lower().endswith(('.mp4', '.avi', '.mov'))
+            
+            if is_video:
+                # Process video
+                cap = cv2.VideoCapture(media_path)
+                if not cap.isOpened():
+                    messagebox.showwarning("Warning", f"Could not open video: {media_id}")
+                    continue
+                
+                # Get video properties
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                
+                # Create output video writer
+                mask_path = os.path.join(export_path, f"{os.path.splitext(media_id)[0]}_mask.mp4")
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(mask_path, fourcc, fps, (width, height), False)
+                
+                # Create progress dialog
+                progress_window = tk.Toplevel(self.master)
+                progress_window.title("Exporting Video Masks")
+                progress_window.geometry("300x100")
+                progress_window.transient(self.master)
+                progress_window.grab_set()
+                
+                progress_label = ttk.Label(progress_window, text=f"Processing {media_id}...")
+                progress_label.pack(pady=10)
+                
+                progress_var = tk.DoubleVar()
+                progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100)
+                progress_bar.pack(fill=tk.X, padx=20, pady=10)
+                
+                # Update UI
+                self.master.update()
+                
+                try:
+                    # Process each frame
+                    frame_idx = 0
+                    while True:
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        
+                        # Create mask frame
+                        mask_frame = np.zeros((height, width), dtype=np.uint8)
+                        
+                        # Draw all masks for this frame
+                        for mask in masks:
+                            points = self.mask_manager.get_interpolated_points(mask, frame_idx)
+                            if points and len(points) >= 3:
+                                # Apply offset to points if needed
+                                if mask_offset != 0:
+                                    points = self._offset_polygon(points, mask_offset)
+                                
+                                # Convert points to numpy array
+                                points = np.array(points, dtype=np.int32)
+                                # Fill the polygon with white (or specified intensity)
+                                cv2.fillPoly(mask_frame, [points], mask_intensity)
+                        
+                        # Apply blur if requested
+                        if blur_mask and blur_amount > 0:
+                            mask_frame = cv2.GaussianBlur(mask_frame, (blur_amount*2+1, blur_amount*2+1), 0)
+                        
+                        # Invert mask if requested
+                        if invert_mask:
+                            mask_frame = cv2.bitwise_not(mask_frame)
+                        
+                        # Write the mask frame
+                        out.write(mask_frame)
+                        frame_idx += 1
+                        
+                        # Update progress
+                        progress_var.set((frame_idx / total_frames) * 100)
+                        progress_window.update()
+                    
+                    # Release video resources
+                    cap.release()
+                    out.release()
+                    
+                finally:
+                    # Close progress window
+                    progress_window.destroy()
+                
+            else:
+                # Process image
+                # Open the image to get dimensions
+                img = Image.open(media_path)
+                width, height = img.size
+                
+                # Create a new black image
+                mask_img = Image.new('L', (width, height), 0)
+                draw = ImageDraw.Draw(mask_img)
+                
+                # Draw all masks
+                for mask in masks:
+                    points = mask.get('points', [])
+                    if points and len(points) >= 3:
+                        # Apply offset to points if needed
+                        if mask_offset != 0:
+                            points = self._offset_polygon(points, mask_offset)
+                        
+                        # Convert points to flat list for PIL
+                        flat_points = [coord for point in points for coord in point]
+                        # Fill the polygon with white (or specified intensity)
+                        draw.polygon(flat_points, fill=mask_intensity)
+                
+                # Apply blur if requested
+                if blur_mask and blur_amount > 0:
+                    mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=blur_amount))
+                
+                # Invert mask if requested
+                if invert_mask:
+                    mask_img = ImageOps.invert(mask_img)
+                
+                # Save the mask image
+                mask_path = os.path.join(export_path, f"{os.path.splitext(media_id)[0]}_mask{os.path.splitext(media_id)[1]}")
+                mask_img.save(mask_path)
+    
+    def _offset_polygon(self, points, offset):
+        """Offset polygon points by the given amount (positive=expand, negative=shrink)"""
+        if offset == 0 or len(points) < 3:
+            return points
+            
+        import numpy as np
+        
+        # Convert to numpy array
+        points_array = np.array(points)
+        
+        # Calculate centroid
+        centroid = np.mean(points_array, axis=0)
+        
+        # Calculate vectors from centroid to each point
+        vectors = points_array - centroid
+        
+        # Normalize vectors
+        norms = np.sqrt(np.sum(vectors**2, axis=1))
+        normalized_vectors = vectors / norms[:, np.newaxis]
+        
+        # Apply offset
+        offset_points = points_array + normalized_vectors * offset
+        
+        # Convert back to list of tuples
+        return [(int(x), int(y)) for x, y in offset_points]
     
     def set_media_path(self):
         """Set the media path for the current project"""
@@ -409,105 +768,4 @@ class MediaCaptioningApp:
             messagebox.showerror("Error", f"Tracking failed: {str(e)}")
         finally:
             # Close progress window
-            progress_window.destroy()
-    
-    def export_masks(self):
-        """Export masks as black and white images/videos"""
-        if not self.current_project:
-            messagebox.showerror("Error", "No project is currently open")
-            return
-        
-        export_dir = filedialog.askdirectory(title="Select Export Directory for Masks")
-        if not export_dir:
-            return
-            
-        import cv2
-        import numpy as np
-        from PIL import Image, ImageDraw
-        
-        # Create export directory if it doesn't exist
-        os.makedirs(export_dir, exist_ok=True)
-        
-        # Process each media file that has masks
-        for media_id, masks in self.current_project.get('masks', {}).items():
-            if not masks:  # Skip if no masks for this media
-                continue
-                
-            # Get the original media file path
-            media_path = os.path.join(self.current_project['media_path'], media_id)
-            if not os.path.exists(media_path):
-                messagebox.showwarning("Warning", f"Media file not found: {media_id}")
-                continue
-            
-            # Determine if it's an image or video
-            is_video = media_id.lower().endswith(('.mp4', '.avi', '.mov'))
-            
-            if is_video:
-                # Process video
-                cap = cv2.VideoCapture(media_path)
-                if not cap.isOpened():
-                    messagebox.showwarning("Warning", f"Could not open video: {media_id}")
-                    continue
-                
-                # Get video properties
-                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                
-                # Create output video writer
-                mask_path = os.path.join(export_dir, f"{os.path.splitext(media_id)[0]}_mask.mp4")
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(mask_path, fourcc, fps, (width, height), False)
-                
-                # Process each frame
-                frame_idx = 0
-                while True:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    
-                    # Create mask frame
-                    mask_frame = np.zeros((height, width), dtype=np.uint8)
-                    
-                    # Draw all masks for this frame
-                    for mask in masks:
-                        points = self.mask_manager.get_interpolated_points(mask, frame_idx)
-                        if points:
-                            # Convert points to numpy array
-                            points = np.array(points, dtype=np.int32)
-                            # Fill the polygon with white (255)
-                            cv2.fillPoly(mask_frame, [points], 255)
-                    
-                    # Write the mask frame
-                    out.write(mask_frame)
-                    frame_idx += 1
-                
-                # Release video resources
-                cap.release()
-                out.release()
-                
-            else:
-                # Process image
-                # Open the image to get dimensions
-                img = Image.open(media_path)
-                width, height = img.size
-                
-                # Create a new black image
-                mask_img = Image.new('L', (width, height), 0)
-                draw = ImageDraw.Draw(mask_img)
-                
-                # Draw all masks
-                for mask in masks:
-                    points = mask.get('points', [])
-                    if points:
-                        # Convert points to flat list for PIL
-                        flat_points = [coord for point in points for coord in point]
-                        # Fill the polygon with white (255)
-                        draw.polygon(flat_points, fill=255)
-                
-                # Save the mask image
-                mask_path = os.path.join(export_dir, f"{os.path.splitext(media_id)[0]}_mask{os.path.splitext(media_id)[1]}")
-                mask_img.save(mask_path)
-        
-        messagebox.showinfo("Success", "Masks exported successfully!") 
+            progress_window.destroy() 
