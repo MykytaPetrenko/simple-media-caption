@@ -76,7 +76,7 @@ It is a new tool, so I guess there are a lot of them, but I have not found them 
 ## Roadmap
 
 - ✅ Mask Tracking (OpenCV)
--  Export mask file for masked training
+- ✅ Export mask file for masked training
 -  Keyboard shortcuts for common operations
 -  Advanced mask manipulation tools
 

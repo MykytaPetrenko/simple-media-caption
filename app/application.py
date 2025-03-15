@@ -50,7 +50,7 @@ class MediaCaptioningApp:
         file_menu.add_command(label="Save Project As", command=self.save_project_as)
         file_menu.add_command(label="Exit", command=self.master.quit)
         menubar.add_cascade(label="File", menu=file_menu)
-
+        
         # Edit menu
         edit_menu = tk.Menu(menubar, tearoff=0)
         edit_menu.add_command(label="Set Media Path", command=self.set_media_path)
@@ -60,7 +60,7 @@ class MediaCaptioningApp:
         export_menu = tk.Menu(menubar, tearoff=0)
         export_menu.add_command(label="Export", command=self.show_export_dialog)
         menubar.add_cascade(label="Export", menu=export_menu)
-                   
+                
         self.master.config(menu=menubar)
     
     def create_layout(self):
@@ -204,21 +204,24 @@ class MediaCaptioningApp:
         main_frame = ttk.Frame(dialog, padding="20 20 20 20")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Get saved export settings or use defaults
+        export_settings = self.current_project.get('export_settings', {})
+        
         # Variables for form fields
-        export_media_var = tk.BooleanVar(value=False)
-        export_media_path_var = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "exported_media"))
+        export_media_var = tk.BooleanVar(value=export_settings.get('export_media', False))
+        export_media_path_var = tk.StringVar(value=export_settings.get('export_media_path', os.path.join(os.path.expanduser("~"), "exported_media")))
         
-        export_captions_var = tk.BooleanVar(value=False)
-        export_captions_path_var = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "exported_captions"))
-        use_media_folder_var = tk.BooleanVar(value=False)
+        export_captions_var = tk.BooleanVar(value=export_settings.get('export_captions', False))
+        export_captions_path_var = tk.StringVar(value=export_settings.get('export_captions_path', os.path.join(os.path.expanduser("~"), "exported_captions")))
+        use_media_folder_var = tk.BooleanVar(value=export_settings.get('use_media_folder', False))
         
-        export_masks_var = tk.BooleanVar(value=False)
-        export_masks_path_var = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "exported_masks"))
-        mask_offset_var = tk.IntVar(value=0)
-        blur_mask_var = tk.BooleanVar(value=False)
-        blur_amount_var = tk.IntVar(value=3)
-        mask_intensity_var = tk.IntVar(value=255)
-        invert_mask_var = tk.BooleanVar(value=False)
+        export_masks_var = tk.BooleanVar(value=export_settings.get('export_masks', False))
+        export_masks_path_var = tk.StringVar(value=export_settings.get('export_masks_path', os.path.join(os.path.expanduser("~"), "exported_masks")))
+        mask_offset_var = tk.IntVar(value=export_settings.get('mask_offset', 0))
+        blur_mask_var = tk.BooleanVar(value=export_settings.get('blur_mask', False))
+        blur_amount_var = tk.IntVar(value=export_settings.get('blur_amount', 3))
+        mask_intensity_var = tk.IntVar(value=export_settings.get('mask_intensity', 255))
+        invert_mask_var = tk.BooleanVar(value=export_settings.get('invert_mask', False))
         
         # Helper function to update UI state
         def update_ui_state():
@@ -322,6 +325,22 @@ class MediaCaptioningApp:
                 messagebox.showerror("Error", "Please select at least one export option")
                 return
             
+            # Save export settings
+            self.current_project.setdefault('export_settings', {}).update({
+                'export_media': export_media_var.get(),
+                'export_media_path': export_media_path_var.get(),
+                'export_captions': export_captions_var.get(),
+                'export_captions_path': export_captions_path_var.get(),
+                'use_media_folder': use_media_folder_var.get(),
+                'export_masks': export_masks_var.get(),
+                'export_masks_path': export_masks_path_var.get(),
+                'mask_offset': mask_offset_var.get(),
+                'blur_mask': blur_mask_var.get(),
+                'blur_amount': blur_amount_var.get(),
+                'mask_intensity': mask_intensity_var.get(),
+                'invert_mask': invert_mask_var.get()
+            })
+            
             # Prepare export paths
             media_export_path = export_media_path_var.get() if export_media_var.get() else None
             
@@ -366,6 +385,12 @@ class MediaCaptioningApp:
         
         # Initialize UI state
         update_ui_state()
+        
+        # Center the dialog on the screen
+        self.center_window(dialog)
+        
+        # Wait for the dialog to be closed
+        dialog.wait_window()
     
     def export_media(self, export_path):
         """Export media files"""
@@ -443,6 +468,9 @@ class MediaCaptioningApp:
                 progress_var = tk.DoubleVar()
                 progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100)
                 progress_bar.pack(fill=tk.X, padx=20, pady=10)
+                
+                # Center the progress window
+                self.center_window(progress_window)
                 
                 # Update UI
                 self.master.update()
@@ -712,6 +740,11 @@ class MediaCaptioningApp:
         # Get initial points from the first keyframe
         initial_points = mask['keyframes'][0]['points']
         
+        # Show tracking configuration dialog
+        tracking_config = self.show_tracking_config_dialog()
+        if not tracking_config:
+            return  # User cancelled
+        
         # Show progress dialog
         progress_window = tk.Toplevel(self.master)
         progress_window.title("Tracking Progress")
@@ -726,12 +759,15 @@ class MediaCaptioningApp:
         progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100)
         progress_bar.pack(fill=tk.X, padx=20, pady=10)
         
+        # Center the progress window
+        self.center_window(progress_window)
+        
         # Update UI
         self.master.update()
         
         try:
-            # Track points across frames
-            tracked_points = track_points_with_lk_and_kalman(media_path, initial_points)
+            # Track points across frames with the configured parameters
+            tracked_points = self.track_points_with_config(media_path, initial_points, tracking_config)
             
             # Clear existing keyframes except the first one
             first_keyframe = mask['keyframes'][0]
@@ -768,4 +804,187 @@ class MediaCaptioningApp:
             messagebox.showerror("Error", f"Tracking failed: {str(e)}")
         finally:
             # Close progress window
-            progress_window.destroy() 
+            progress_window.destroy()
+    
+    def show_tracking_config_dialog(self):
+        """Show dialog for configuring tracking parameters"""
+        # Create dialog window
+        dialog = tk.Toplevel(self.master)
+        dialog.title("Tracking Configuration")
+        dialog.geometry("450x400")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        
+        # Create main frame with padding
+        main_frame = ttk.Frame(dialog, padding="20 20 20 20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Get saved tracking settings or use defaults
+        tracking_settings = self.current_project.get('tracking_settings', {})
+        
+        # Variables for form fields
+        use_shifted_points_var = tk.BooleanVar(value=tracking_settings.get('use_shifted_points', True))
+        shift_value_var = tk.IntVar(value=tracking_settings.get('shift_value', 5))
+        
+        use_window1_var = tk.BooleanVar(value=tracking_settings.get('use_window1', True))
+        window1_size_var = tk.IntVar(value=tracking_settings.get('window1_size', 21))
+        
+        use_window2_var = tk.BooleanVar(value=tracking_settings.get('use_window2', False))
+        window2_size_var = tk.IntVar(value=tracking_settings.get('window2_size', 31))
+        
+        use_window3_var = tk.BooleanVar(value=tracking_settings.get('use_window3', False))
+        window3_size_var = tk.IntVar(value=tracking_settings.get('window3_size', 41))
+        
+        filter_method_var = tk.StringVar(value=tracking_settings.get('filter_method', "consensus"))
+        
+        # Result variable
+        result = {"cancelled": True}
+        
+        # Helper function to update UI state
+        def update_ui_state():
+            shift_value_entry.config(state=tk.NORMAL if use_shifted_points_var.get() else tk.DISABLED)
+            
+            window1_size_entry.config(state=tk.NORMAL if use_window1_var.get() else tk.DISABLED)
+            window2_size_entry.config(state=tk.NORMAL if use_window2_var.get() else tk.DISABLED)
+            window3_size_entry.config(state=tk.NORMAL if use_window3_var.get() else tk.DISABLED)
+        
+        # Sample points section
+        sample_frame = ttk.LabelFrame(main_frame, text="Sample Points", padding="10 10 10 10")
+        sample_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        use_shifted_cb = ttk.Checkbutton(sample_frame, text="Use Shifted Sample Points", 
+                                         variable=use_shifted_points_var, command=update_ui_state)
+        use_shifted_cb.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        
+        ttk.Label(sample_frame, text="Shift Value (px):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        shift_value_entry = ttk.Spinbox(sample_frame, from_=1, to=20, textvariable=shift_value_var, width=5)
+        shift_value_entry.grid(row=1, column=1, sticky=tk.W, pady=2)
+        
+        # Window sizes section
+        window_frame = ttk.LabelFrame(main_frame, text="Window Sizes", padding="10 10 10 10")
+        window_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Window 1
+        use_window1_cb = ttk.Checkbutton(window_frame, text="Window 1", 
+                                        variable=use_window1_var, command=update_ui_state)
+        use_window1_cb.grid(row=0, column=0, sticky=tk.W, pady=2)
+        
+        ttk.Label(window_frame, text="Size:").grid(row=0, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        window1_size_entry = ttk.Spinbox(window_frame, from_=5, to=51, increment=2, 
+                                        textvariable=window1_size_var, width=5)
+        window1_size_entry.grid(row=0, column=2, sticky=tk.W, pady=2, padx=(5, 0))
+        
+        # Window 2
+        use_window2_cb = ttk.Checkbutton(window_frame, text="Window 2", 
+                                        variable=use_window2_var, command=update_ui_state)
+        use_window2_cb.grid(row=1, column=0, sticky=tk.W, pady=2)
+        
+        ttk.Label(window_frame, text="Size:").grid(row=1, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        window2_size_entry = ttk.Spinbox(window_frame, from_=5, to=51, increment=2, 
+                                        textvariable=window2_size_var, width=5)
+        window2_size_entry.grid(row=1, column=2, sticky=tk.W, pady=2, padx=(5, 0))
+        
+        # Window 3
+        use_window3_cb = ttk.Checkbutton(window_frame, text="Window 3", 
+                                        variable=use_window3_var, command=update_ui_state)
+        use_window3_cb.grid(row=2, column=0, sticky=tk.W, pady=2)
+        
+        ttk.Label(window_frame, text="Size:").grid(row=2, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        window3_size_entry = ttk.Spinbox(window_frame, from_=5, to=51, increment=2, 
+                                        textvariable=window3_size_var, width=5)
+        window3_size_entry.grid(row=2, column=2, sticky=tk.W, pady=2, padx=(5, 0))
+        
+        # Filtering method section
+        filter_frame = ttk.LabelFrame(main_frame, text="Filtering Method", padding="10 10 10 10")
+        filter_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Radiobutton(filter_frame, text="Average", variable=filter_method_var, 
+                       value="average").pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(filter_frame, text="Consensus", variable=filter_method_var, 
+                       value="consensus").pack(anchor=tk.W, pady=2)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        def on_ok():
+            # Validate window sizes are odd numbers
+            for var in [window1_size_var, window2_size_var, window3_size_var]:
+                if var.get() % 2 == 0:
+                    messagebox.showerror("Error", "Window sizes must be odd numbers")
+                    return
+            
+            # Save tracking settings
+            self.current_project.setdefault('tracking_settings', {}).update({
+                'use_shifted_points': use_shifted_points_var.get(),
+                'shift_value': shift_value_var.get(),
+                'use_window1': use_window1_var.get(),
+                'window1_size': window1_size_var.get(),
+                'use_window2': use_window2_var.get(),
+                'window2_size': window2_size_var.get(),
+                'use_window3': use_window3_var.get(),
+                'window3_size': window3_size_var.get(),
+                'filter_method': filter_method_var.get()
+            })
+            
+            # Collect configuration
+            result["cancelled"] = False
+            result["use_shifted_points"] = use_shifted_points_var.get()
+            result["shift_value"] = shift_value_var.get()
+            
+            result["windows"] = []
+            if use_window1_var.get():
+                result["windows"].append(window1_size_var.get())
+            if use_window2_var.get():
+                result["windows"].append(window2_size_var.get())
+            if use_window3_var.get():
+                result["windows"].append(window3_size_var.get())
+            
+            result["filter_method"] = filter_method_var.get()
+            
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.RIGHT)
+        
+        # Initialize UI state
+        update_ui_state()
+        
+        # Center the dialog on the screen
+        self.center_window(dialog)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return None if result["cancelled"] else result
+    
+    def track_points_with_config(self, video_path, initial_points, config):
+        """Track points using the configured parameters"""
+        from app.tracking import track_points_with_consensus
+        
+        # If no windows specified, use default
+        if not config["windows"]:
+            config["windows"] = [21]
+        
+        # Call the tracking function with the configured parameters
+        return track_points_with_consensus(
+            video_path, 
+            initial_points, 
+            use_shifted_points=config["use_shifted_points"],
+            shift_value=config["shift_value"],
+            window_sizes=config["windows"],
+            filter_method=config["filter_method"]
+        )
+    
+    def center_window(self, window):
+        """Center a window on the screen"""
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f'{width}x{height}+{x}+{y}') 
