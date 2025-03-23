@@ -32,6 +32,24 @@ class ProjectManager:
                     "Please update the media path after loading."
                 )
             
+            # Check if masks path exists, create if needed
+            masks_path = project_data.get('masks_path')
+            if not masks_path or not os.path.isdir(masks_path):
+                # Default masks directory is sibling to media directory
+                project_dir = os.path.dirname(file_path)
+                masks_path = os.path.join(project_dir, "masks")
+                os.makedirs(masks_path, exist_ok=True)
+                project_data['masks_path'] = masks_path
+            
+            # Check if captions path exists, create if needed
+            captions_path = project_data.get('captions_path')
+            if not captions_path or not os.path.isdir(captions_path):
+                # Default captions directory is sibling to media directory
+                project_dir = os.path.dirname(file_path)
+                captions_path = os.path.join(project_dir, "captions")
+                os.makedirs(captions_path, exist_ok=True)
+                project_data['captions_path'] = captions_path
+            
             # Set file path in project data
             project_data['file_path'] = file_path
             
@@ -61,6 +79,10 @@ class ProjectManager:
                 media_id = self.app.current_media['id']
                 caption = self.app.caption_text.get(1.0, "end-1c")
                 project_data['media_files'][media_id]['caption'] = caption
+                
+                # Save current mask
+                if hasattr(self.app, 'mask_editor'):
+                    self.app.mask_editor.save_mask()
             
             with open(file_path, 'w') as f:
                 json.dump(project_data, f, indent=2)
@@ -85,18 +107,19 @@ class ProjectManager:
             # Get media files with captions
             media_files = self.app.current_project.get('media_files', {})
             media_path = self.app.current_project.get('media_path', '')
+            masks_path = self.app.current_project.get('masks_path', '')
             
             if not media_path or not os.path.isdir(media_path):
                 raise ValueError("Invalid media path")
             
-            # Copy media files and create caption files
+            # Copy media files, masks and create caption files
             copied_count = 0
             for media_id, media_data in media_files.items():
+                # Copy media file
                 source_path = os.path.join(media_path, media_id)
                 if not os.path.isfile(source_path):
                     continue
                 
-                # Copy media file
                 dest_path = os.path.join(export_dir, media_id)
                 shutil.copy2(source_path, dest_path)
                 
@@ -106,11 +129,19 @@ class ProjectManager:
                 with open(caption_file, 'w') as f:
                     f.write(caption)
                 
+                # Copy mask file if it exists
+                name, _ = os.path.splitext(media_id)
+                mask_file = name + '.png'
+                mask_source = os.path.join(masks_path, mask_file)
+                if os.path.isfile(mask_source):
+                    mask_dest = os.path.join(export_dir, mask_file)
+                    shutil.copy2(mask_source, mask_dest)
+                
                 copied_count += 1
             
             messagebox.showinfo(
                 "Export Complete",
-                f"Exported {copied_count} media files with captions to {export_dir}"
+                f"Exported {copied_count} media files with captions and masks to {export_dir}"
             )
         
         except Exception as e:

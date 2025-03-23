@@ -12,7 +12,8 @@ import json
 
 from app.media_viewer import MediaViewer
 from app.project_manager import ProjectManager
-from app.ui_components import FileListPanel, ControlPanel
+from app.ui_components import FileListPanel, ControlPanel, BrushControlPanel
+from app.mask_editor import MaskEditor
 
 class MediaCaptioningApp:
     def __init__(self, master):
@@ -73,9 +74,26 @@ class MediaCaptioningApp:
         self.right_panel = ttk.Frame(self.main_frame, width=200)
         self.right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
         
-        # Center panel - Media viewer and caption editor
-        self.media_viewer = MediaViewer(self.center_panel, self)
-        self.media_viewer.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        # Create tabs for media view and mask editing
+        self.tabs = ttk.Notebook(self.center_panel)
+        self.tabs.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        
+        # Media viewer tab
+        self.media_tab = ttk.Frame(self.tabs)
+        self.tabs.add(self.media_tab, text="Media")
+        
+        # Mask editor tab
+        self.mask_tab = ttk.Frame(self.tabs)
+        self.tabs.add(self.mask_tab, text="Mask")
+        
+        # Create components for each tab
+        # Media viewer
+        self.media_viewer = MediaViewer(self.media_tab, self)
+        self.media_viewer.pack(fill=tk.BOTH, expand=True)
+        
+        # Mask editor
+        self.mask_editor = MaskEditor(self.mask_tab, self)
+        self.mask_editor.pack(fill=tk.BOTH, expand=True)
         
         # Caption editor
         caption_frame = ttk.LabelFrame(self.center_panel, text="Caption")
@@ -88,6 +106,10 @@ class MediaCaptioningApp:
         # Right panel - File list
         self.file_list_panel = FileListPanel(self.right_panel, self)
         self.file_list_panel.pack(fill=tk.BOTH, expand=True)
+        
+        # Left panel - Brush controls
+        self.brush_control_panel = BrushControlPanel(self.left_panel, self)
+        self.brush_control_panel.pack(fill=tk.X, expand=False)
         
         # Bottom panel - Controls
         self.control_panel = ControlPanel(self.center_panel, self)
@@ -121,13 +143,34 @@ class MediaCaptioningApp:
             if not messagebox.askyesno("New Project", "Any unsaved changes will be lost. Continue?"):
                 return
         
+        # Create a project directory
+        project_dir = filedialog.askdirectory(
+            title="Create Project Directory",
+            mustexist=False
+        )
+        
+        if not project_dir:
+            return
+        
+        # Create project directories
+        os.makedirs(project_dir, exist_ok=True)
+        os.makedirs(os.path.join(project_dir, "media"), exist_ok=True)
+        os.makedirs(os.path.join(project_dir, "masks"), exist_ok=True)
+        os.makedirs(os.path.join(project_dir, "captions"), exist_ok=True)
+        
         self.current_project = {
-            'name': 'Untitled Project',
-            'media_path': '',
+            'name': os.path.basename(project_dir),
+            'media_path': os.path.join(project_dir, "media"),
+            'masks_path': os.path.join(project_dir, "masks"),
+            'captions_path': os.path.join(project_dir, "captions"),
             'media_files': {}
         }
         self.current_media = None
         self.update_ui_state()
+        
+        # Save the project
+        project_file = os.path.join(project_dir, f"{os.path.basename(project_dir)}.json")
+        self.project_manager.save_project(project_file)
     
     def open_project(self):
         """Open an existing project"""
@@ -144,6 +187,10 @@ class MediaCaptioningApp:
         if not self.current_project:
             messagebox.showerror("Error", "No project is currently open")
             return
+        
+        # Save the current mask if there's a current media
+        if self.current_media and hasattr(self, 'mask_editor'):
+            self.mask_editor.save_mask()
         
         if 'file_path' in self.current_project:
             self.project_manager.save_project(self.current_project['file_path'])
@@ -343,9 +390,14 @@ class MediaCaptioningApp:
         if not self.current_project or not media_id:
             return
         
-        # Save current caption if there's a current media
+        # Save current mask and caption if there's a current media
         if self.current_media:
+            # Save caption
             self.current_media['caption'] = self.caption_text.get(1.0, tk.END).strip()
+            
+            # Save mask
+            if hasattr(self, 'mask_editor'):
+                self.mask_editor.save_mask()
         
         # Get or create media entry
         if media_id not in self.current_project['media_files']:
@@ -357,7 +409,11 @@ class MediaCaptioningApp:
         self.current_media = self.current_project['media_files'][media_id]
         
         # Update UI
-        self.media_viewer.load_media(os.path.join(self.current_project['media_path'], media_id))
+        media_path = os.path.join(self.current_project['media_path'], media_id)
+        self.media_viewer.load_media(media_path)
+        
+        # Load mask will be called by the media_viewer's load_media method
+        
         self.update_ui_state()
     
     def on_caption_change(self, event=None):

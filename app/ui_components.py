@@ -174,4 +174,90 @@ class ControlPanel(ttk.Frame):
         self.update_ui()
         
         # Schedule next update
-        self.after(100, self.update_timer) 
+        self.after(100, self.update_timer)
+
+class BrushControlPanel(ttk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        
+        # Create frame with title
+        self.frame = ttk.LabelFrame(self, text="Brush Controls")
+        self.frame.pack(fill=tk.X, expand=False, padx=5, pady=5)
+        
+        # Brush size control
+        size_frame = ttk.Frame(self.frame)
+        size_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(size_frame, text="Brush Size:").pack(side=tk.LEFT, padx=5)
+        
+        self.size_var = tk.IntVar(value=10)
+        size_slider = ttk.Scale(size_frame, from_=1, to=50, orient=tk.HORIZONTAL,
+                              variable=self.size_var, command=self.on_size_change)
+        size_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        
+        self.size_label = ttk.Label(size_frame, text="10")
+        self.size_label.pack(side=tk.LEFT, padx=5)
+        
+        # Brush intensity control
+        intensity_frame = ttk.Frame(self.frame)
+        intensity_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(intensity_frame, text="Opacity:").pack(side=tk.LEFT, padx=5)
+        
+        self.intensity_var = tk.IntVar(value=255)
+        intensity_slider = ttk.Scale(intensity_frame, from_=0, to=255, orient=tk.HORIZONTAL,
+                                   variable=self.intensity_var, command=self.on_intensity_change)
+        intensity_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        
+        self.intensity_label = ttk.Label(intensity_frame, text="100%")
+        self.intensity_label.pack(side=tk.LEFT, padx=5)
+        
+        # Mask actions
+        actions_frame = ttk.Frame(self.frame)
+        actions_frame.pack(fill=tk.X, pady=5)
+        
+        self.add_mask_button = ttk.Button(actions_frame, text="Add Mask", command=self.on_add_mask)
+        self.add_mask_button.pack(side=tk.LEFT, padx=5)
+        
+        self.clear_mask_button = ttk.Button(actions_frame, text="Clear Mask", command=self.on_clear_mask)
+        self.clear_mask_button.pack(side=tk.LEFT, padx=5)
+    
+    def on_size_change(self, value):
+        """Handle brush size change"""
+        size = int(float(value))
+        self.size_label.config(text=str(size))
+        
+        if hasattr(self.app, 'mask_editor'):
+            self.app.mask_editor.set_brush_size(size)
+    
+    def on_intensity_change(self, value):
+        """Handle brush intensity change"""
+        intensity = int(float(value))
+        percentage = int(intensity / 255 * 100)
+        self.intensity_label.config(text=f"{percentage}%")
+        
+        if hasattr(self.app, 'mask_editor'):
+            self.app.mask_editor.set_brush_intensity(intensity)
+    
+    def on_add_mask(self):
+        """Handle add mask button click"""
+        if hasattr(self.app, 'mask_editor') and hasattr(self.app, 'media_viewer'):
+            if self.app.current_media and self.app.media_viewer.media_path:
+                width = self.app.media_viewer.media_width
+                height = self.app.media_viewer.media_height
+                
+                if width > 0 and height > 0:
+                    self.app.mask_editor.create_mask(self.app.media_viewer.media_path, width, height)
+    
+    def on_clear_mask(self):
+        """Handle clear mask button click"""
+        if hasattr(self.app, 'mask_editor') and self.app.current_media:
+            if messagebox.askyesno("Clear Mask", "Are you sure you want to clear the current mask?"):
+                # Create a new white mask with the same dimensions
+                media_path = self.app.media_viewer.media_path
+                width = self.app.media_viewer.media_width
+                height = self.app.media_viewer.media_height
+                
+                if width > 0 and height > 0:
+                    self.app.mask_editor.create_mask(media_path, width, height) 

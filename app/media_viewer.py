@@ -12,6 +12,7 @@ from PIL import Image, ImageTk
 import cv2
 import threading
 import time
+import numpy as np
 
 class MediaViewer(ttk.Frame):
     def __init__(self, parent, app):
@@ -33,6 +34,9 @@ class MediaViewer(ttk.Frame):
         self.scale_factor = 1.0
         self.offset_x = 0
         self.offset_y = 0
+        
+        # Mask overlay
+        self.mask_overlay = None
         
         # Create canvas for displaying media
         self.canvas_frame = ttk.Frame(self)
@@ -68,12 +72,19 @@ class MediaViewer(ttk.Frame):
             self.load_video()
         else:
             self.load_image()
+        
+        # Load the mask if the mask editor is available
+        if hasattr(self.app, 'mask_editor'):
+            self.app.mask_editor.load_mask(media_path)
     
     def load_image(self):
         """Load and display an image"""
         try:
             # Open image with PIL
             image = Image.open(self.media_path)
+            
+            # Store original dimensions
+            self.media_width, self.media_height = image.size
             
             # Resize to fit canvas
             self.resize_and_display_image(image)
@@ -101,6 +112,10 @@ class MediaViewer(ttk.Frame):
             fps = self.video_capture.get(cv2.CAP_PROP_FPS)
             width = int(self.video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(self.video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            # Store original dimensions
+            self.media_width = width
+            self.media_height = height
             
             # Read first frame
             ret, frame = self.video_capture.read()
@@ -190,6 +205,15 @@ class MediaViewer(ttk.Frame):
         
         # Read and display frame
         ret, frame = self.video_capture.read()
+        if ret:
+            # Convert frame from BGR to RGB
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Convert to PIL Image
+            image = Image.fromarray(frame_rgb)
+            
+            # Resize and display
+            self.resize_and_display_image(image)
     
     def next_frame(self):
         """Go to next frame in video"""
@@ -234,6 +258,10 @@ class MediaViewer(ttk.Frame):
                 # Not playing, sleep to avoid busy waiting
                 time.sleep(0.1)
     
+    def update_frame(self, image):
+        """Update the displayed frame during video playback"""
+        self.resize_and_display_image(image)
+    
     def resize_and_display_image(self, image):
         """Resize image to fit canvas and display it"""
         if not image:
@@ -273,10 +301,49 @@ class MediaViewer(ttk.Frame):
         # Store reference to prevent garbage collection
         self.current_frame = photo_image
         
-        # Clear canvas and display image
+        # Clear canvas
         self.canvas.delete("all")
         
+        # Display image
         self.canvas.create_image(self.offset_x, self.offset_y, anchor=tk.NW, image=photo_image)
+        
+        # Apply mask overlay if available
+        self.apply_mask_overlay()
+    
+    def apply_mask_overlay(self):
+        """Apply the mask overlay on top of the media"""
+        if not hasattr(self.app, 'mask_editor') or not self.app.mask_editor.mask:
+            return
+        
+        # Get the mask from the mask editor
+        mask = self.app.mask_editor.mask
+        
+        # Resize mask to match the displayed media size
+        new_width = int(self.media_width * self.scale_factor)
+        new_height = int(self.media_height * self.scale_factor)
+        
+        # Resize the mask
+        resized_mask = mask.resize((new_width, new_height), Image.LANCZOS)
+        
+        # Create an RGBA image with black color and alpha from mask
+        mask_array = np.array(resized_mask)
+        alpha_array = 255 - mask_array  # Invert so white (255) becomes 0 alpha
+        
+        # Create RGBA image with black color and alpha from mask
+        rgba_array = np.zeros((mask_array.shape[0], mask_array.shape[1], 4), dtype=np.uint8)
+        rgba_array[..., 3] = alpha_array
+        
+        # Convert back to PIL Image
+        overlay = Image.fromarray(rgba_array, 'RGBA')
+        
+        # Convert to PhotoImage
+        overlay_image = ImageTk.PhotoImage(overlay)
+        
+        # Store reference to prevent garbage collection
+        self.mask_overlay = overlay_image
+        
+        # Display mask overlay
+        self.canvas.create_image(self.offset_x, self.offset_y, anchor=tk.NW, image=self.mask_overlay)
     
     def canvas_to_media_coords(self, x, y):
         """Convert canvas coordinates to media coordinates"""
