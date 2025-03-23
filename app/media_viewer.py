@@ -68,10 +68,6 @@ class MediaViewer(ttk.Frame):
             self.load_video()
         else:
             self.load_image()
-            
-        # Draw masks for the current media
-        if hasattr(self.app, 'mask_manager'):
-            self.app.mask_manager.draw_all_masks()
     
     def load_image(self):
         """Load and display an image"""
@@ -194,15 +190,6 @@ class MediaViewer(ttk.Frame):
         
         # Read and display frame
         ret, frame = self.video_capture.read()
-        if ret:
-            # Convert frame from BGR to RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Convert to PIL Image
-            image = Image.fromarray(frame_rgb)
-            
-            # Update frame and redraw masks with interpolation
-            self.update_frame(image)
     
     def next_frame(self):
         """Go to next frame in video"""
@@ -246,36 +233,6 @@ class MediaViewer(ttk.Frame):
             else:
                 # Not playing, sleep to avoid busy waiting
                 time.sleep(0.1)
-    
-    def update_frame(self, image):
-        """Update the displayed frame and redraw masks"""
-        # Store current editing state
-        editing_state = None
-        if hasattr(self.app, 'mask_manager'):
-            editing_state = {
-                'active_tool': self.app.mask_manager.active_tool,
-                'current_mask': self.app.mask_manager.current_mask,
-                'current_points': self.app.mask_manager.current_points.copy() if self.app.mask_manager.current_points else None,
-                'editing_mask_id': self.app.mask_manager.editing_mask_id
-            }
-        
-        # Update the image
-        self.resize_and_display_image(image)
-        
-        # Update mask manager with current frame
-        if hasattr(self.app, 'mask_manager'):
-            self.app.mask_manager.update_frame(self.current_frame_index)
-            
-            # Draw all masks with interpolated positions
-            self.app.mask_manager.draw_all_masks()
-            
-            # Only restore editing state if we're actively editing
-            if editing_state and editing_state['active_tool'] in ['edit', 'keyframe'] and editing_state['current_points']:
-                self.app.mask_manager.active_tool = editing_state['active_tool']
-                self.app.mask_manager.current_mask = editing_state['current_mask']
-                self.app.mask_manager.current_points = editing_state['current_points']
-                self.app.mask_manager.editing_mask_id = editing_state['editing_mask_id']
-                self.app.mask_manager.draw_mask_points()
     
     def resize_and_display_image(self, image):
         """Resize image to fit canvas and display it"""
@@ -341,13 +298,6 @@ class MediaViewer(ttk.Frame):
         if self.media_path and self.current_frame:
             # Store current editing state
             editing_state = None
-            if hasattr(self.app, 'mask_manager'):
-                editing_state = {
-                    'active_tool': self.app.mask_manager.active_tool,
-                    'current_mask': self.app.mask_manager.current_mask,
-                    'current_points': self.app.mask_manager.current_points.copy() if self.app.mask_manager.current_points else None,
-                    'editing_mask_id': self.app.mask_manager.editing_mask_id
-                }
             
             # If we have a video, get the current frame
             if self.is_video and self.video_capture and not self.playing:
@@ -368,19 +318,6 @@ class MediaViewer(ttk.Frame):
                     
                     # Resize and display
                     self.resize_and_display_image(image)
-            
-            # Redraw masks
-            if hasattr(self.app, 'mask_manager'):
-                # Draw all masks
-                self.app.mask_manager.draw_all_masks()
-                
-                # Only restore editing state if we're actively editing
-                if editing_state and editing_state['active_tool'] in ['edit', 'keyframe'] and editing_state['current_points']:
-                    self.app.mask_manager.active_tool = editing_state['active_tool']
-                    self.app.mask_manager.current_mask = editing_state['current_mask']
-                    self.app.mask_manager.current_points = editing_state['current_points']
-                    self.app.mask_manager.editing_mask_id = editing_state['editing_mask_id']
-                    self.app.mask_manager.draw_mask_points()
     
     def clear(self):
         """Clear the canvas and reset state"""

@@ -8,7 +8,7 @@ A minimalistic application for media captioning and masking using Python and Tki
 - Support for images and videos (mp4)
 - Media preview with video playback controls
 - Text captioning for media files
-- Polygon-based masking tools (in progress)
+- masking tools (in progress)
 - Dataset export functionality (diffusion-pipe compatible)
 - Intuitive user interface built with Tkinter
 - Theoretically cross-platform (I test on Windows)
@@ -75,7 +75,6 @@ It is a new tool, so I guess there are a lot of them, but I have not found them 
 
 ## Roadmap
 
-- ✅ Mask Tracking (OpenCV)
 - ✅ Export mask file for masked training
 -  Keyboard shortcuts for common operations
 -  Advanced mask manipulation tools
